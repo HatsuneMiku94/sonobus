@@ -50,10 +50,12 @@ jobs:
         run: |
           $window = Get-Content Source/SonoStandaloneFilterWindow.h -Raw
           $app = Get-Content Source/SonoStandaloneFilterApp.cpp -Raw
+          $options = Get-Content Source/OptionsView.cpp -Raw
           if ($window -notmatch 'class SonoBusSystemTrayIcon final') { throw 'Native tray class is missing from source.' }
           if ($window -notmatch 'minimisationStateChanged') { throw 'Native minimize-to-tray handler is missing from source.' }
-          if ($window -notmatch 'Start with Windows \(minimized to tray\)') { throw 'Windows autostart toggle is missing from source.' }
-          if ($window -notmatch 'WindowsRegistry::setValue') { throw 'Windows autostart registration is missing from source.' }
+          if ($options -notmatch 'Start with Windows \(minimized to tray\)') { throw 'Windows autostart toggle is missing from the in-app Options panel.' }
+          if ($options -notmatch 'WindowsRegistry::setValue') { throw 'Windows autostart registration is missing from the Options implementation.' }
+          if ($window -match 'Start with Windows \(minimized to tray\)') { throw 'Autostart toggle should not be duplicated in the host popup.' }
           if ($app -notmatch '\-\-start-minimized') { throw 'Minimized startup command-line support is missing from source.' }
           git diff --check
 
