@@ -2,49 +2,112 @@
 
 This repository is an **unofficial fork of SonoBus** (`sonosaurus/sonobus`).
 
-This fork does **not** claim ownership of the original SonoBus project or its upstream work; it only maintains additional modifications and quality-of-life features on top of the original project.
+It does **not** claim ownership of the original SonoBus project, branding, design, source history, or upstream contributions. The purpose of this fork is simply to maintain a small set of clearly documented quality-of-life modifications on top of the original project.
 
-SonoBus remains licensed under the **GNU General Public License v3.0 (GPLv3)**. This fork preserves the original license and copyright notices and publishes its modifications under the same license.
+SonoBus remains licensed under the **GNU General Public License v3.0 (GPLv3)**, together with the repository's existing license exception where applicable. Original copyright and license notices are preserved.
 
-## Purpose of this fork
+## Fork goals
 
-The goal of this fork is to add practical quality-of-life improvements to SonoBus while keeping the original application and workflow intact.
+The fork is intended to stay close to upstream SonoBus while adding practical desktop conveniences, primarily for Windows users. Changes should be:
 
-## Current modifications
+- small and understandable;
+- optional where possible;
+- implemented directly in source rather than through external helper processes;
+- documented transparently;
+- easy to distinguish from upstream SonoBus behavior.
 
-### Windows native minimize-to-tray support
+## Current fork-specific modifications
 
-Added on **2026-08-17**.
+### 1. Native Windows minimize-to-tray
 
-- Adds a native Windows system tray icon to the standalone SonoBus application.
-- Minimizing SonoBus hides the main window from the normal Windows taskbar while keeping audio and network activity running.
-- Clicking the tray icon restores the main SonoBus window.
-- The tray context menu provides **Open SonoBus** and **Exit SonoBus** actions.
-- The normal window **Close (X)** button still exits the application.
-- The tray functionality is compiled directly into `SonoBus.exe`; no companion helper process is required.
+**Added:** 2026-08-17
 
-### Windows autostart minimized to tray
+The Windows standalone SonoBus application now integrates directly with the Windows notification area.
 
-Added on **2026-08-17**.
+Behavior:
 
-- Adds a **Start with Windows (minimized to tray)** toggle directly to SonoBus's in-app **OPTIONS** tab.
-- Uses the current user's standard Windows startup registry entry (`HKEY_CURRENT_USER`), so enabling it does not require administrator privileges.
-- The startup entry points to the exact `SonoBus.exe` being used and passes the internal `--start-minimized` option.
-- At Windows sign-in, SonoBus initializes normally but keeps its main window hidden and remains available from the system tray.
+- Clicking the normal Windows **Minimize** button hides the SonoBus main window from the taskbar.
+- SonoBus continues running normally in the background.
+- Audio and network processing remain active while the window is hidden.
+- A SonoBus tray icon remains available in the Windows notification area.
+- Left-clicking the tray icon restores the SonoBus window.
+- Right-clicking the tray icon opens a context menu containing:
+  - **Open SonoBus**
+  - **Exit SonoBus**
+- The normal window **Close (X)** button keeps its original behavior and exits SonoBus.
+
+Implementation notes:
+
+- The feature is native to the standalone application source.
+- No sidecar tray program or helper process is used.
+- The minimize handling is deferred through JUCE's message loop to avoid racing the native Windows minimize transition and leaving stale taskbar state.
+
+### 2. Start with Windows, minimized to tray
+
+**Added:** 2026-08-17
+
+The Windows standalone application's **Settings → OPTIONS** tab now includes:
+
+**Start with Windows (minimized to tray)**
+
+Behavior:
+
+- Enabling the toggle registers SonoBus to start for the **current Windows user** at sign-in.
+- It uses the standard per-user Windows `Run` registry location under `HKEY_CURRENT_USER`.
+- Administrator privileges are not required.
+- The startup entry launches the current `SonoBus.exe` with the internal `--start-minimized` argument.
+- At sign-in, SonoBus initializes normally but keeps the main window hidden and remains available from the system tray.
 - Disabling the toggle removes the startup entry.
+- The in-app toggle reads the actual registry state when the Options panel is opened or refreshed.
 
-## Building this fork
+Path behavior:
 
-The minimize-to-tray implementation is part of the source code directly, so there is **no fork-specific patch step** required before compiling.
+The startup entry stores the exact executable path that enabled the option. If the user later moves or renames the executable, they should disable and re-enable the setting from the new location.
 
-The repository also includes a Windows x64 GitHub Actions workflow that provisions SonoBus's existing ASIO SDK dependency automatically and builds the standalone application.
+Runtime status:
 
-## Upstream
+This behavior has been compiled successfully through the repository's Windows GitHub Actions build and confirmed working in normal Windows runtime testing by the fork maintainer.
 
-Original project: **SonoBus** by its original authors and contributors.
+## Build integration
 
-This fork is not an official SonoBus release. Issues caused specifically by modifications in this fork should be reported here rather than to the upstream project.
+The fork-specific Windows changes are part of the normal source tree. There is **no patch script** or post-checkout transformation required.
+
+The repository includes a Windows x64 GitHub Actions workflow that:
+
+- checks out `main`;
+- provisions SonoBus's existing Steinberg ASIO SDK dependency;
+- verifies the tray and autostart source integration;
+- configures the project with CMake and Visual Studio;
+- builds the `SonoBus_Standalone` target;
+- uploads the resulting `SonoBus.exe` as an artifact.
+
+For manual Windows build information, see [`BUILD_WINDOWS.md`](BUILD_WINDOWS.md).
+
+## Upstream relationship
+
+Original project: **SonoBus** by Jesse Chappell / Sonosaurus and the upstream contributors.
+
+Original repository:
+
+`https://github.com/sonosaurus/sonobus`
+
+This repository:
+
+`https://github.com/PixelCat55/sonobus`
+
+This fork is **not an official SonoBus release**. General SonoBus bugs and upstream behavior belong to the original project; issues caused specifically by the modifications documented here belong to this fork.
+
+## Ownership and attribution
+
+The maintainer of this fork claims ownership only over new fork-specific contributions to the extent allowed by the applicable license. No ownership is claimed over the original SonoBus project or upstream work.
+
+The intent is to keep attribution straightforward: **SonoBus is SonoBus; this fork simply adds optional convenience features on top of it.**
 
 ## License
 
-This fork is distributed under the same **GNU General Public License v3.0** terms as the upstream project. See the repository's `LICENSE` file for the full license text.
+This fork is distributed under the same applicable open-source licensing terms as upstream SonoBus. See:
+
+- [`LICENSE`](LICENSE)
+- [`LICENSE_EXCEPTION`](LICENSE_EXCEPTION)
+
+Third-party dependencies retain their own copyright and license terms.
