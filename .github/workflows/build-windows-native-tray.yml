@@ -24,6 +24,35 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
+      - name: Install Steinberg ASIO SDK 2.3.4
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://mirror.msys2.org/mingw/mingw64/mingw-w64-x86_64-asiosdk-2.3.4-1-any.pkg.tar.zst'
+          $expectedSha256 = 'c7e9f19b20d47ca629b071dc97463f8ad885a484e84e9e21d121e154d8ca0cf5'
+          $package = Join-Path $env:RUNNER_TEMP 'asiosdk.pkg.tar.zst'
+          $extract = Join-Path $env:RUNNER_TEMP 'asiosdk-package'
+          $destination = Join-Path (Split-Path $env:GITHUB_WORKSPACE -Parent) 'asiosdk'
+
+          Invoke-WebRequest -Uri $url -OutFile $package
+          $actualSha256 = (Get-FileHash $package -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualSha256 -ne $expectedSha256) {
+            throw "ASIO SDK package checksum mismatch. Expected $expectedSha256, got $actualSha256"
+          }
+
+          New-Item -ItemType Directory -Force -Path $extract | Out-Null
+          tar -xf $package -C $extract
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to extract ASIO SDK package.' }
+
+          $source = Join-Path $extract 'mingw64\include\asiosdk'
+          if (-not (Test-Path (Join-Path $source 'common\iasiodrv.h'))) {
+            throw 'ASIO SDK extraction did not contain common\iasiodrv.h.'
+          }
+
+          New-Item -ItemType Directory -Force -Path $destination | Out-Null
+          Copy-Item -Path (Join-Path $source '*') -Destination $destination -Recurse -Force
+          Write-Host "ASIO SDK installed at $destination"
+
       - name: Apply native tray integration
         shell: pwsh
         run: python tools/apply_windows_tray_patch.py
