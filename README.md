@@ -1,4 +1,4 @@
-Unofficial SonoBus fork featuring native Windows minimize-to-tray integration.
+Unofficial SonoBus fork featuring native Windows minimize-to-tray integration and optional autostart-to-tray support.
 
 > **Fork note:** Native Windows minimize-to-tray support and optional **Start with Windows (minimized to tray)** support are built directly into the standalone SonoBus source. No helper executable or tray patch step is required when compiling this fork. The Windows GitHub Actions build provisions SonoBus's existing ASIO SDK dependency automatically.
 

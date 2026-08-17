@@ -27,7 +27,7 @@ Added on **2026-08-17**.
 
 Added on **2026-08-17**.
 
-- Adds a **Start with Windows (minimized to tray)** toggle to the standalone app's Options menu.
+- Adds a **Start with Windows (minimized to tray)** toggle directly to SonoBus's in-app **OPTIONS** tab.
 - Uses the current user's standard Windows startup registry entry (`HKEY_CURRENT_USER`), so enabling it does not require administrator privileges.
 - The startup entry points to the exact `SonoBus.exe` being used and passes the internal `--start-minimized` option.
 - At Windows sign-in, SonoBus initializes normally but keeps its main window hidden and remains available from the system tray.

@@ -1057,32 +1057,6 @@ public:
     }
 
 #if JUCE_WINDOWS
-    static String getWindowsStartupRegistryPath()
-    {
-        return "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\SonoBus";
-    }
-
-    static String getWindowsStartupCommand()
-    {
-        const auto executablePath = File::getSpecialLocation (File::currentExecutableFile).getFullPathName();
-        return "\"" + executablePath + "\" --start-minimized";
-    }
-
-    bool isStartWithWindowsEnabled() const
-    {
-        return WindowsRegistry::getValue (getWindowsStartupRegistryPath()).trim() == getWindowsStartupCommand();
-    }
-
-    bool setStartWithWindowsEnabled (bool shouldEnable)
-    {
-        const auto registryPath = getWindowsStartupRegistryPath();
-        if (shouldEnable)
-            return WindowsRegistry::setValue (registryPath, getWindowsStartupCommand());
-        if (! WindowsRegistry::valueExists (registryPath))
-            return true;
-        return WindowsRegistry::deleteValue (registryPath);
-    }
-
     void minimisationStateChanged (bool isNowMinimised) override
     {
         if (! isNowMinimised || hideToTrayPending)
@@ -1131,10 +1105,6 @@ public:
         m.addItem (3, TRANS("Load a saved state..."));
         m.addSeparator();
         m.addItem (4, TRANS("Reset to default state"));
-#if JUCE_WINDOWS
-        m.addSeparator();
-        m.addItem (5, TRANS("Start with Windows (minimized to tray)"), true, isStartWithWindowsEnabled());
-#endif
 
         m.showMenuAsync (PopupMenu::Options(),
                          ModalCallbackFunction::forComponent (menuCallback, this));
@@ -1148,15 +1118,6 @@ public:
             case 2:  pluginHolder->askUserToSaveState(); break;
             case 3:  pluginHolder->askUserToLoadState(); break;
             case 4:  resetToDefaultState(); break;
-#if JUCE_WINDOWS
-            case 5:
-            {
-                const bool shouldEnable = ! isStartWithWindowsEnabled();
-                if (! setStartWithWindowsEnabled (shouldEnable))
-                    AlertWindow::showMessageBoxAsync (AlertWindow::WarningIcon, TRANS("Startup Setting"), TRANS("SonoBus could not update the Windows startup setting."));
-                break;
-            }
-#endif
             default: break;
         }
     }

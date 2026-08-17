@@ -35,6 +35,41 @@ enum {
     separatorColourId = 0x1002850,
 };
 
+#if JUCE_WINDOWS
+namespace
+{
+String getSonoBusWindowsStartupRegistryPath()
+{
+    return "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\SonoBus";
+}
+
+String getSonoBusWindowsStartupCommand()
+{
+    const auto executablePath = File::getSpecialLocation (File::currentExecutableFile).getFullPathName();
+    return "\"" + executablePath + "\" --start-minimized";
+}
+
+bool isSonoBusWindowsStartupEnabled()
+{
+    return WindowsRegistry::getValue (getSonoBusWindowsStartupRegistryPath()).trim()
+           == getSonoBusWindowsStartupCommand();
+}
+
+bool setSonoBusWindowsStartupEnabled (bool shouldEnable)
+{
+    const auto registryPath = getSonoBusWindowsStartupRegistryPath();
+
+    if (shouldEnable)
+        return WindowsRegistry::setValue (registryPath, getSonoBusWindowsStartupCommand());
+
+    if (! WindowsRegistry::valueExists (registryPath))
+        return true;
+
+    return WindowsRegistry::deleteValue (registryPath);
+}
+}
+#endif
+
 
 void OptionsView::initializeLanguages()
 {
@@ -259,6 +294,13 @@ OptionsView::OptionsView(SonobusAudioProcessor& proc, std::function<AudioDeviceM
     mOptionsAutoReconnectButton = std::make_unique<ToggleButton>(TRANS("Auto-Reconnect to Last Group"));
     mAutoReconnectAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment> (processor.getValueTreeState(), SonobusAudioProcessor::paramAutoReconnectLast, *mOptionsAutoReconnectButton);
 
+#if JUCE_WINDOWS
+    mOptionsStartWithWindowsButton = std::make_unique<ToggleButton>(TRANS("Start with Windows (minimized to tray)"));
+    mOptionsStartWithWindowsButton->setTooltip(TRANS("Automatically launch SonoBus when you sign in to Windows and keep it hidden in the system tray."));
+    mOptionsStartWithWindowsButton->setToggleState(isSonoBusWindowsStartupEnabled(), dontSendNotification);
+    mOptionsStartWithWindowsButton->addListener(this);
+#endif
+
     mOptionsOverrideSamplerateButton = std::make_unique<ToggleButton>(TRANS("Override Device Sample Rate"));
     mOptionsOverrideSamplerateButton->addListener(this);
 
@@ -391,6 +433,9 @@ OptionsView::OptionsView(SonobusAudioProcessor& proc, std::function<AudioDeviceM
     if (JUCEApplicationBase::isStandaloneApp()) {
         mOptionsComponent->addAndMakeVisible(mOptionsOverrideSamplerateButton.get());
         mOptionsComponent->addAndMakeVisible(mOptionsShouldCheckForUpdateButton.get());
+#if JUCE_WINDOWS
+        mOptionsComponent->addAndMakeVisible(mOptionsStartWithWindowsButton.get());
+#endif
         if (mOptionsAllowBluetoothInput) {
             mOptionsComponent->addAndMakeVisible(mOptionsAllowBluetoothInput.get());
         }
@@ -628,6 +673,10 @@ void OptionsView::updateState(bool ignorecheck)
             Value * val = getShouldCheckForNewVersionValue();
             mOptionsShouldCheckForUpdateButton->setToggleState((bool)val->getValue(), dontSendNotification);
         }
+#if JUCE_WINDOWS
+        if (mOptionsStartWithWindowsButton)
+            mOptionsStartWithWindowsButton->setToggleState(isSonoBusWindowsStartupEnabled(), dontSendNotification);
+#endif
 
         if (getAllowBluetoothInputValue && mOptionsAllowBluetoothInput) {
             Value * val = getAllowBluetoothInputValue();
@@ -765,6 +814,13 @@ void OptionsView::updateLayout()
     optionsAutoReconnectBox.items.add(FlexItem(10, 12).withFlex(0));
     optionsAutoReconnectBox.items.add(FlexItem(180, minpassheight, *mOptionsAutoReconnectButton).withMargin(0).withFlex(1));
 
+#if JUCE_WINDOWS
+    optionsStartWithWindowsBox.items.clear();
+    optionsStartWithWindowsBox.flexDirection = FlexBox::Direction::row;
+    optionsStartWithWindowsBox.items.add(FlexItem(10, 12).withFlex(0));
+    optionsStartWithWindowsBox.items.add(FlexItem(180, minpassheight, *mOptionsStartWithWindowsButton).withMargin(0).withFlex(1));
+#endif
+
     optionsOverrideSamplerateBox.items.clear();
     optionsOverrideSamplerateBox.flexDirection = FlexBox::Direction::row;
     optionsOverrideSamplerateBox.items.add(FlexItem(10, 12).withFlex(0));
@@ -831,6 +887,10 @@ void OptionsView::updateLayout()
     //optionsBox.items.add(FlexItem(100, minpassheight, optionsHearlatBox).withMargin(2).withFlex(0));
     optionsBox.items.add(FlexItem(100, minpassheight, optionsSnapToMouseBox).withMargin(2).withFlex(0));
     optionsBox.items.add(FlexItem(100, minpassheight, optionsAutoReconnectBox).withMargin(2).withFlex(0));
+#if JUCE_WINDOWS
+    if (JUCEApplicationBase::isStandaloneApp())
+        optionsBox.items.add(FlexItem(100, minpassheight, optionsStartWithWindowsBox).withMargin(2).withFlex(0));
+#endif
     optionsBox.items.add(FlexItem(100, minitemheight, optionsUdpBox).withMargin(2).withFlex(0));
     if (JUCEApplicationBase::isStandaloneApp()) {
         optionsBox.items.add(FlexItem(100, minpassheight, optionsOverrideSamplerateBox).withMargin(2).withFlex(0));
@@ -1151,6 +1211,19 @@ void OptionsView::buttonClicked (Button* buttonThatWasClicked)
             //}
         }
     }
+#if JUCE_WINDOWS
+    else if (buttonThatWasClicked == mOptionsStartWithWindowsButton.get()) {
+        if (JUCEApplicationBase::isStandaloneApp()) {
+            const bool shouldEnable = mOptionsStartWithWindowsButton->getToggleState();
+            if (! setSonoBusWindowsStartupEnabled (shouldEnable)) {
+                mOptionsStartWithWindowsButton->setToggleState(!shouldEnable, dontSendNotification);
+                AlertWindow::showMessageBoxAsync(AlertWindow::WarningIcon,
+                                                 TRANS("Startup Setting"),
+                                                 TRANS("SonoBus could not update the Windows startup setting."));
+            }
+        }
+    }
+#endif
     else if (buttonThatWasClicked == mOptionsSliderSnapToMouseButton.get()) {
         bool newval = mOptionsSliderSnapToMouseButton->getToggleState();
         processor.setSlidersSnapToMousePosition(newval);
