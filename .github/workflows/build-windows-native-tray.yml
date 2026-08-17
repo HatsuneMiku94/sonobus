@@ -4,11 +4,10 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feature/native-windows-tray
+      - main
     paths:
       - "Source/**"
       - "CMakeLists.txt"
-      - "tools/apply_windows_tray_patch.py"
       - ".github/workflows/build-windows-native-tray.yml"
 
 permissions:
@@ -45,15 +44,14 @@ jobs:
           New-Item -ItemType Directory -Force -Path $destination | Out-Null
           Copy-Item -Path (Join-Path $source '*') -Destination $destination -Recurse -Force
           Write-Host "ASIO SDK installed at $destination"
-          Get-ChildItem (Join-Path $destination 'common') | Select-Object Name
 
-      - name: Apply native tray integration
+      - name: Verify native tray integration
         shell: pwsh
-        run: python tools/apply_windows_tray_patch.py
-
-      - name: Show tray source changes
-        shell: pwsh
-        run: git diff --check; git diff -- Source/SonoStandaloneFilterWindow.h
+        run: |
+          $source = Get-Content Source/SonoStandaloneFilterWindow.h -Raw
+          if ($source -notmatch 'class SonoBusSystemTrayIcon final') { throw 'Native tray class is missing from source.' }
+          if ($source -notmatch 'minimisationStateChanged') { throw 'Native minimize-to-tray handler is missing from source.' }
+          git diff --check
 
       - name: Configure CMake
         shell: pwsh
@@ -64,7 +62,6 @@ jobs:
         run: cmake --build build --config Release --target SonoBus_Standalone --parallel 2
 
       - name: Locate executable
-        id: locate
         shell: pwsh
         run: |
           $exe = Get-ChildItem -Path build -Recurse -Filter SonoBus.exe | Where-Object { $_.FullName -match 'Release' } | Select-Object -First 1
@@ -73,7 +70,7 @@ jobs:
           Copy-Item $exe.FullName artifact/SonoBus.exe
           Get-FileHash artifact/SonoBus.exe -Algorithm SHA256 | Format-List
 
-      - name: Upload patched SonoBus
+      - name: Upload SonoBus
         uses: actions/upload-artifact@v4
         with:
           name: SonoBus-Windows-x64-NativeTray
