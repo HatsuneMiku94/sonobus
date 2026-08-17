@@ -39,9 +39,63 @@
 
 #include <limits>
 #include <algorithm>
+#include <functional>
 
 namespace juce
 {
+
+#if JUCE_WINDOWS
+class SonoBusSystemTrayIcon final : public SystemTrayIconComponent
+{
+public:
+    SonoBusSystemTrayIcon()
+    {
+        Image icon (Image::ARGB, 32, 32, true);
+        Graphics g (icon);
+        g.setColour (Colour (0xff188fbe));
+        g.fillEllipse (2.0f, 2.0f, 28.0f, 28.0f);
+        g.setColour (Colours::white);
+        g.setFont (Font (20.0f, Font::bold));
+        g.drawText ("S", icon.getBounds(), Justification::centred, false);
+
+        setIconImage (icon, icon);
+        setIconTooltip ("SonoBus");
+    }
+
+    std::function<void()> restoreRequested;
+    std::function<void()> quitRequested;
+
+    void mouseDown (const MouseEvent& event) override
+    {
+        if (! event.mods.isPopupMenu())
+        {
+            if (restoreRequested)
+                restoreRequested();
+
+            return;
+        }
+
+        PopupMenu menu;
+        menu.addItem (1, TRANS("Open SonoBus"));
+        menu.addSeparator();
+        menu.addItem (2, TRANS("Exit SonoBus"));
+        menu.showMenuAsync (PopupMenu::Options(),
+                            ModalCallbackFunction::forComponent (menuCallback, this));
+    }
+
+private:
+    static void menuCallback (int result, SonoBusSystemTrayIcon* tray)
+    {
+        if (tray == nullptr)
+            return;
+
+        if (result == 1 && tray->restoreRequested)
+            tray->restoreRequested();
+        else if (result == 2 && tray->quitRequested)
+            tray->quitRequested();
+    }
+};
+#endif
 
 //==============================================================================
 /**
@@ -861,6 +915,16 @@ public:
         optionsButton.addListener (this);
         optionsButton.setTriggeredOnMouseDown (true);
         setUsingNativeTitleBar(true);
+
+       #if JUCE_WINDOWS
+        systemTrayIcon = std::make_unique<SonoBusSystemTrayIcon>();
+        systemTrayIcon->restoreRequested = [this]() { restoreFromSystemTray(); };
+        systemTrayIcon->quitRequested = []()
+        {
+            if (auto* app = JUCEApplicationBase::getInstance())
+                app->systemRequestedQuit();
+        };
+       #endif
         #endif
 
         setResizable (true, false);
@@ -992,6 +1056,46 @@ public:
         JUCEApplicationBase::getInstance()->systemRequestedQuit();
     }
 
+#if JUCE_WINDOWS
+    void minimisationStateChanged (bool isNowMinimised) override
+    {
+        if (! isNowMinimised || hideToTrayPending)
+            return;
+
+        // The Windows minimise notification arrives while the native window is
+        // still completing its minimise transition. Hiding synchronously here
+        // races that transition and can leave a stale taskbar button or a window
+        // that refuses to minimise a second time. Queue the hide until the native
+        // minimise operation has completely returned.
+        hideToTrayPending = true;
+        Component::SafePointer<StandaloneFilterWindow> safeThis (this);
+
+        MessageManager::callAsync ([safeThis]() mutable
+        {
+            if (safeThis == nullptr)
+                return;
+
+            safeThis->hideToTrayPending = false;
+
+            if (safeThis->isMinimised())
+                safeThis->setVisible (false);
+        });
+    }
+
+    void restoreFromSystemTray()
+    {
+        hideToTrayPending = false;
+
+        // Restore the native window while it is still hidden, then show it.
+        // This avoids briefly re-creating a minimised taskbar button.
+        if (isMinimised())
+            setMinimised (false);
+
+        setVisible (true);
+        toFront (true);
+    }
+#endif
+
     void buttonClicked (Button*) override
     {
         PopupMenu m;
@@ -1039,6 +1143,10 @@ public:
     virtual StandalonePluginHolder* getPluginHolder()    { return pluginHolder.get(); }
 
     std::unique_ptr<StandalonePluginHolder> pluginHolder;
+#if JUCE_WINDOWS
+    std::unique_ptr<SonoBusSystemTrayIcon> systemTrayIcon;
+    bool hideToTrayPending = false;
+#endif
 
     
 private:
