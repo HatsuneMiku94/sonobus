@@ -1,0 +1,82 @@
+name: Build Windows SonoBus with Native Tray
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/native-windows-tray
+    paths:
+      - "Source/**"
+      - "CMakeLists.txt"
+      - "tools/apply_windows_tray_patch.py"
+      - ".github/workflows/build-windows-native-tray.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-x64:
+    name: Windows x64 Release
+    runs-on: windows-2022
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install Steinberg ASIO SDK
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bash = 'C:\msys64\usr\bin\bash.exe'
+          if (-not (Test-Path $bash)) {
+            throw 'MSYS2 is not available at C:\msys64 on this runner.'
+          }
+
+          & $bash -lc 'pacman -Sy --noconfirm --needed mingw-w64-x86_64-asiosdk'
+          if ($LASTEXITCODE -ne 0) { throw 'MSYS2 failed to install the ASIO SDK.' }
+
+          $source = 'C:\msys64\mingw64\include\asiosdk'
+          $destination = Join-Path (Split-Path $env:GITHUB_WORKSPACE -Parent) 'asiosdk'
+          if (-not (Test-Path (Join-Path $source 'common\iasiodrv.h'))) {
+            throw 'Installed ASIO SDK does not contain common\iasiodrv.h.'
+          }
+
+          New-Item -ItemType Directory -Force -Path $destination | Out-Null
+          Copy-Item -Path (Join-Path $source '*') -Destination $destination -Recurse -Force
+          Write-Host "ASIO SDK installed at $destination"
+          Get-ChildItem (Join-Path $destination 'common') | Select-Object Name
+
+      - name: Apply native tray integration
+        shell: pwsh
+        run: python tools/apply_windows_tray_patch.py
+
+      - name: Show tray source changes
+        shell: pwsh
+        run: git diff --check; git diff -- Source/SonoStandaloneFilterWindow.h
+
+      - name: Configure CMake
+        shell: pwsh
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+
+      - name: Build SonoBus standalone
+        shell: pwsh
+        run: cmake --build build --config Release --target SonoBus_Standalone --parallel 2
+
+      - name: Locate executable
+        id: locate
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path build -Recurse -Filter SonoBus.exe | Where-Object { $_.FullName -match 'Release' } | Select-Object -First 1
+          if (-not $exe) { throw 'SonoBus.exe was not produced by the build.' }
+          New-Item -ItemType Directory -Force -Path artifact | Out-Null
+          Copy-Item $exe.FullName artifact/SonoBus.exe
+          Get-FileHash artifact/SonoBus.exe -Algorithm SHA256 | Format-List
+
+      - name: Upload patched SonoBus
+        uses: actions/upload-artifact@v4
+        with:
+          name: SonoBus-Windows-x64-NativeTray
+          path: artifact/SonoBus.exe
+          if-no-files-found: error
+          retention-days: 30
