@@ -1,4 +1,4 @@
-name: Build Windows SonoBus with Native Tray
+name: Build Enhanced Windows SonoBus
 
 on:
   workflow_dispatch:
@@ -45,12 +45,16 @@ jobs:
           Copy-Item -Path (Join-Path $source '*') -Destination $destination -Recurse -Force
           Write-Host "ASIO SDK installed at $destination"
 
-      - name: Verify native tray integration
+      - name: Verify Windows fork features
         shell: pwsh
         run: |
-          $source = Get-Content Source/SonoStandaloneFilterWindow.h -Raw
-          if ($source -notmatch 'class SonoBusSystemTrayIcon final') { throw 'Native tray class is missing from source.' }
-          if ($source -notmatch 'minimisationStateChanged') { throw 'Native minimize-to-tray handler is missing from source.' }
+          $window = Get-Content Source/SonoStandaloneFilterWindow.h -Raw
+          $app = Get-Content Source/SonoStandaloneFilterApp.cpp -Raw
+          if ($window -notmatch 'class SonoBusSystemTrayIcon final') { throw 'Native tray class is missing from source.' }
+          if ($window -notmatch 'minimisationStateChanged') { throw 'Native minimize-to-tray handler is missing from source.' }
+          if ($window -notmatch 'Start with Windows \(minimized to tray\)') { throw 'Windows autostart toggle is missing from source.' }
+          if ($window -notmatch 'WindowsRegistry::setValue') { throw 'Windows autostart registration is missing from source.' }
+          if ($app -notmatch '\-\-start-minimized') { throw 'Minimized startup command-line support is missing from source.' }
           git diff --check
 
       - name: Configure CMake
@@ -73,7 +77,7 @@ jobs:
       - name: Upload SonoBus
         uses: actions/upload-artifact@v4
         with:
-          name: SonoBus-Windows-x64-NativeTray
+          name: SonoBus-Windows-x64-Enhanced
           path: artifact/SonoBus.exe
           if-no-files-found: error
           retention-days: 30
