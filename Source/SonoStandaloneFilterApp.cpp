@@ -124,6 +124,9 @@ public:
     bool doInitialConnect = false;
     bool doImmediateQuit = false;
     bool doHeadless = false;
+#if JUCE_WINDOWS
+    bool startMinimizedToTray = false;
+#endif
     String loadSetupFilename;
     String cmdlineArgUrl;
 
@@ -311,6 +314,9 @@ public:
 
         const String headlessSpec("-q|--headless");
         const String headlessSpecDesc("-q|--headless");
+#if JUCE_WINDOWS
+        const String startMinimizedSpec("--start-minimized");
+#endif
 
         const String loadSetupSpec("-l|--load-setup");
         const String loadSetupSpecDesc("-l|--load-setup <setup-filename>");
@@ -355,8 +361,11 @@ public:
             TRANS("You'll need to use other command-line options to connect to a group... eventually there will be an OSC remote control interface."),
             nullptr
         });
-
-
+#if JUCE_WINDOWS
+        app.addCommand ({ startMinimizedSpec, startMinimizedSpec,
+            TRANS("Start SonoBus hidden in the Windows system tray."), {}, nullptr
+        });
+#endif
 
         if (arglist.removeOptionIfFound(versionSpec)) {
             std::cout << getApplicationName() << TRANS(" version ") << getApplicationVersion() << std::endl;
@@ -412,7 +421,10 @@ public:
         if (setupfile.isNotEmpty()) {
             loadSetupFilename = setupfile;
         }
-
+#if JUCE_WINDOWS
+        if (arglist.removeOptionIfFound(startMinimizedSpec))
+            startMinimizedToTray = true;
+#endif
 
         if (arglist.removeOptionIfFound(headlessSpec)) {
 
@@ -450,7 +462,12 @@ public:
             Desktop::getInstance().setKioskModeComponent (mainWindow.get(), false);
 #endif
 
-            mainWindow->setVisible (true);
+#if JUCE_WINDOWS
+            if (startMinimizedToTray)
+                mainWindow->setVisible (false);
+            else
+#endif
+                mainWindow->setVisible (true);
 
             Desktop::getInstance().setScreenSaverEnabled(false);
 

@@ -23,6 +23,16 @@ Added on **2026-08-17**.
 - The normal window **Close (X)** button still exits the application.
 - The tray functionality is compiled directly into `SonoBus.exe`; no companion helper process is required.
 
+### Windows autostart minimized to tray
+
+Added on **2026-08-17**.
+
+- Adds a **Start with Windows (minimized to tray)** toggle to the standalone app's Options menu.
+- Uses the current user's standard Windows startup registry entry (`HKEY_CURRENT_USER`), so enabling it does not require administrator privileges.
+- The startup entry points to the exact `SonoBus.exe` being used and passes the internal `--start-minimized` option.
+- At Windows sign-in, SonoBus initializes normally but keeps its main window hidden and remains available from the system tray.
+- Disabling the toggle removes the startup entry.
+
 ## Building this fork
 
 The minimize-to-tray implementation is part of the source code directly, so there is **no fork-specific patch step** required before compiling.
