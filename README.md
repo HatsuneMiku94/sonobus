@@ -1,3 +1,4 @@
+Unofficial SonoBus fork featuring native Windows minimize-to-tray integration.
 
 # SonoBus
 
