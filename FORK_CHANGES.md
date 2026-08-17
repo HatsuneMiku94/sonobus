@@ -2,6 +2,8 @@
 
 This repository is an **unofficial fork of SonoBus** (`sonosaurus/sonobus`).
 
+This fork does **not** claim ownership of the original SonoBus project or its upstream work; it only maintains additional modifications and quality-of-life features on top of the original project.
+
 SonoBus remains licensed under the **GNU General Public License v3.0 (GPLv3)**. This fork preserves the original license and copyright notices and publishes its modifications under the same license.
 
 ## Purpose of this fork
