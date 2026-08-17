@@ -46,45 +46,33 @@ jobs:
         shell: pwsh
         run: python tools/apply_windows_tray_patch.py
 
-      - name: Convert CI to build native source directly
+      - name: Add fork build note
         shell: python
         run: |
           from pathlib import Path
-
-          workflow = Path('.github/workflows/build-windows-native-tray.yml')
-          text = workflow.read_text(encoding='utf-8')
-          text = text.replace('      - feature/native-windows-tray\n', '      - main\n')
-          text = text.replace('      - "tools/apply_windows_tray_patch.py"\n', '')
-          patch_step = '''      - name: Apply native tray integration\n        shell: pwsh\n        run: python tools/apply_windows_tray_patch.py\n\n      - name: Show tray source changes\n        shell: pwsh\n        run: git diff --check; git diff -- Source/SonoStandaloneFilterWindow.h\n\n'''
-          verify_step = '''      - name: Verify native tray integration\n        shell: pwsh\n        run: |\n          $source = Get-Content Source/SonoStandaloneFilterWindow.h -Raw\n          if ($source -notmatch 'class SonoBusSystemTrayIcon final') { throw 'Native tray class is missing from source.' }\n          if ($source -notmatch 'minimisationStateChanged') { throw 'Native minimize-to-tray handler is missing from source.' }\n\n'''
-          if patch_step not in text:
-              raise SystemExit('Expected tray patch CI steps were not found.')
-          text = text.replace(patch_step, verify_step, 1)
-          workflow.write_text(text, encoding='utf-8', newline='\n')
-
           readme = Path('README.md')
-          r = readme.read_text(encoding='utf-8')
+          text = readme.read_text(encoding='utf-8')
           marker = 'Unofficial SonoBus fork featuring native Windows minimize-to-tray integration.\n\n'
           note = '''Unofficial SonoBus fork featuring native Windows minimize-to-tray integration.\n\n> **Fork note:** The Windows minimize-to-tray implementation is built directly into the standalone SonoBus source. No helper executable or tray patch step is required when compiling this fork. The Windows GitHub Actions build provisions SonoBus's existing ASIO SDK dependency automatically.\n\n'''
-          if marker not in r:
-              raise SystemExit('README fork marker was not found.')
-          r = r.replace(marker, note, 1)
-          readme.write_text(r, encoding='utf-8', newline='\n')
+          if note not in text:
+              if marker not in text:
+                  raise SystemExit('README fork marker was not found.')
+              text = text.replace(marker, note, 1)
+              readme.write_text(text, encoding='utf-8', newline='\n')
 
-      - name: Remove obsolete patch machinery
+      - name: Remove obsolete patcher
         shell: pwsh
-        run: |
-          Remove-Item tools/apply_windows_tray_patch.py -Force
-          Remove-Item .github/workflows/materialize-native-tray.yml -Force
+        run: Remove-Item tools/apply_windows_tray_patch.py -Force
 
       - name: Validate repository changes
         shell: pwsh
         run: |
           git diff --check
-          git status --short
           $source = Get-Content Source/SonoStandaloneFilterWindow.h -Raw
           if ($source -notmatch 'class SonoBusSystemTrayIcon final') { throw 'Tray code was not materialized.' }
+          if ($source -notmatch 'minimisationStateChanged') { throw 'Minimize-to-tray handler is missing.' }
           if (Test-Path tools/apply_windows_tray_patch.py) { throw 'Obsolete patcher still exists.' }
+          git status --short
 
       - name: Configure CMake
         shell: pwsh
@@ -99,8 +87,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- Source/SonoStandaloneFilterWindow.h README.md .github/workflows/build-windows-native-tray.yml
-          git rm -- tools/apply_windows_tray_patch.py .github/workflows/materialize-native-tray.yml
+          git add -- Source/SonoStandaloneFilterWindow.h README.md
+          git rm -- tools/apply_windows_tray_patch.py
           git diff --cached --check
           git diff --cached --stat
           git commit -m "Make native Windows tray integration part of source"
