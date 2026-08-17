@@ -32,7 +32,7 @@ text = replace_once(
 
 close_block = '''    void closeButtonPressed() override\n    {\n        pluginHolder->savePluginState();\n\n        JUCEApplicationBase::getInstance()->systemRequestedQuit();\n    }'''
 
-close_replacement = close_block + '''\n\n#if JUCE_WINDOWS\n    void minimisationStateChanged (bool isNowMinimised) override\n    {\n        if (isNowMinimised)\n        {\n            setVisible (false);\n            setMinimised (false);\n        }\n    }\n\n    void restoreFromSystemTray()\n    {\n        setVisible (true);\n        setMinimised (false);\n        toFront (true);\n    }\n#endif'''
+close_replacement = close_block + '''\n\n#if JUCE_WINDOWS\n    void minimisationStateChanged (bool isNowMinimised) override\n    {\n        if (! isNowMinimised || hideToTrayPending)\n            return;\n\n        // The Windows minimise notification arrives while the native window is\n        // still completing its minimise transition. Hiding synchronously here\n        // races that transition and can leave a stale taskbar button or a window\n        // that refuses to minimise a second time. Queue the hide until the native\n        // minimise operation has completely returned.\n        hideToTrayPending = true;\n        Component::SafePointer<StandaloneFilterWindow> safeThis (this);\n\n        MessageManager::callAsync ([safeThis]() mutable\n        {\n            if (safeThis == nullptr)\n                return;\n\n            safeThis->hideToTrayPending = false;\n\n            if (safeThis->isMinimised())\n                safeThis->setVisible (false);\n        });\n    }\n\n    void restoreFromSystemTray()\n    {\n        hideToTrayPending = false;\n\n        // Restore the native window while it is still hidden, then show it.\n        // This avoids briefly re-creating a minimised taskbar button.\n        if (isMinimised())\n            setMinimised (false);\n\n        setVisible (true);\n        toFront (true);\n    }\n#endif'''
 
 text = replace_once(
     text,
@@ -44,7 +44,7 @@ text = replace_once(
 text = replace_once(
     text,
     '    std::unique_ptr<StandalonePluginHolder> pluginHolder;\n',
-    '''    std::unique_ptr<StandalonePluginHolder> pluginHolder;\n#if JUCE_WINDOWS\n    std::unique_ptr<SonoBusSystemTrayIcon> systemTrayIcon;\n#endif\n''',
+    '''    std::unique_ptr<StandalonePluginHolder> pluginHolder;\n#if JUCE_WINDOWS\n    std::unique_ptr<SonoBusSystemTrayIcon> systemTrayIcon;\n    bool hideToTrayPending = false;\n#endif\n''',
     "tray member insertion",
 )
 
