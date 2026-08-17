@@ -1,0 +1,107 @@
+name: Materialize native tray integration
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/materialize-native-tray.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  materialize-and-verify:
+    runs-on: windows-2022
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Install Steinberg ASIO SDK
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bash = 'C:\msys64\usr\bin\bash.exe'
+          if (-not (Test-Path $bash)) {
+            throw 'MSYS2 is not available at C:\msys64 on this runner.'
+          }
+
+          & $bash -lc 'pacman -Sy --noconfirm --needed mingw-w64-x86_64-asiosdk'
+          if ($LASTEXITCODE -ne 0) { throw 'MSYS2 failed to install the ASIO SDK.' }
+
+          $source = 'C:\msys64\mingw64\include\asiosdk'
+          $destination = Join-Path (Split-Path $env:GITHUB_WORKSPACE -Parent) 'asiosdk'
+          if (-not (Test-Path (Join-Path $source 'common\iasiodrv.h'))) {
+            throw 'Installed ASIO SDK does not contain common\iasiodrv.h.'
+          }
+
+          New-Item -ItemType Directory -Force -Path $destination | Out-Null
+          Copy-Item -Path (Join-Path $source '*') -Destination $destination -Recurse -Force
+
+      - name: Materialize tray code into source
+        shell: pwsh
+        run: python tools/apply_windows_tray_patch.py
+
+      - name: Convert CI to build native source directly
+        shell: python
+        run: |
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/build-windows-native-tray.yml')
+          text = workflow.read_text(encoding='utf-8')
+          text = text.replace('      - feature/native-windows-tray\n', '      - main\n')
+          text = text.replace('      - "tools/apply_windows_tray_patch.py"\n', '')
+          patch_step = '''      - name: Apply native tray integration\n        shell: pwsh\n        run: python tools/apply_windows_tray_patch.py\n\n      - name: Show tray source changes\n        shell: pwsh\n        run: git diff --check; git diff -- Source/SonoStandaloneFilterWindow.h\n\n'''
+          verify_step = '''      - name: Verify native tray integration\n        shell: pwsh\n        run: |\n          $source = Get-Content Source/SonoStandaloneFilterWindow.h -Raw\n          if ($source -notmatch 'class SonoBusSystemTrayIcon final') { throw 'Native tray class is missing from source.' }\n          if ($source -notmatch 'minimisationStateChanged') { throw 'Native minimize-to-tray handler is missing from source.' }\n\n'''
+          if patch_step not in text:
+              raise SystemExit('Expected tray patch CI steps were not found.')
+          text = text.replace(patch_step, verify_step, 1)
+          workflow.write_text(text, encoding='utf-8', newline='\n')
+
+          readme = Path('README.md')
+          r = readme.read_text(encoding='utf-8')
+          marker = 'Unofficial SonoBus fork featuring native Windows minimize-to-tray integration.\n\n'
+          note = '''Unofficial SonoBus fork featuring native Windows minimize-to-tray integration.\n\n> **Fork note:** The Windows minimize-to-tray implementation is built directly into the standalone SonoBus source. No helper executable or tray patch step is required when compiling this fork. The Windows GitHub Actions build provisions SonoBus's existing ASIO SDK dependency automatically.\n\n'''
+          if marker not in r:
+              raise SystemExit('README fork marker was not found.')
+          r = r.replace(marker, note, 1)
+          readme.write_text(r, encoding='utf-8', newline='\n')
+
+      - name: Remove obsolete patch machinery
+        shell: pwsh
+        run: |
+          Remove-Item tools/apply_windows_tray_patch.py -Force
+          Remove-Item .github/workflows/materialize-native-tray.yml -Force
+
+      - name: Validate repository changes
+        shell: pwsh
+        run: |
+          git diff --check
+          git status --short
+          $source = Get-Content Source/SonoStandaloneFilterWindow.h -Raw
+          if ($source -notmatch 'class SonoBusSystemTrayIcon final') { throw 'Tray code was not materialized.' }
+          if (Test-Path tools/apply_windows_tray_patch.py) { throw 'Obsolete patcher still exists.' }
+
+      - name: Configure CMake
+        shell: pwsh
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+
+      - name: Build native tray standalone
+        shell: pwsh
+        run: cmake --build build --config Release --target SonoBus_Standalone --parallel 2
+
+      - name: Commit materialized source to main
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- Source/SonoStandaloneFilterWindow.h README.md .github/workflows/build-windows-native-tray.yml
+          git rm -- tools/apply_windows_tray_patch.py .github/workflows/materialize-native-tray.yml
+          git diff --cached --check
+          git diff --cached --stat
+          git commit -m "Make native Windows tray integration part of source"
+          git push origin HEAD:main
