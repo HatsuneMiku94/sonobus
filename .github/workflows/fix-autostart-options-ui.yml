@@ -1,0 +1,68 @@
+name: Fix autostart options UI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/fix-autostart-options-ui.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  fix-build-commit:
+    runs-on: windows-2022
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Install Steinberg ASIO SDK
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bash = 'C:\msys64\usr\bin\bash.exe'
+          & $bash -lc 'pacman -Sy --noconfirm --needed mingw-w64-x86_64-asiosdk'
+          if ($LASTEXITCODE -ne 0) { throw 'MSYS2 failed to install the ASIO SDK.' }
+          $source = 'C:\msys64\mingw64\include\asiosdk'
+          $destination = Join-Path (Split-Path $env:GITHUB_WORKSPACE -Parent) 'asiosdk'
+          New-Item -ItemType Directory -Force -Path $destination | Out-Null
+          Copy-Item -Path (Join-Path $source '*') -Destination $destination -Recurse -Force
+
+      - name: Apply UI correction
+        shell: pwsh
+        run: python tools/fix_windows_autostart_options_ui.py
+
+      - name: Validate UI correction
+        shell: pwsh
+        run: |
+          git diff --check
+          $optionsH = Get-Content Source/OptionsView.h -Raw
+          $optionsCpp = Get-Content Source/OptionsView.cpp -Raw
+          $window = Get-Content Source/SonoStandaloneFilterWindow.h -Raw
+          if ($optionsH -notmatch 'mOptionsStartWithWindowsButton') { throw 'Options toggle member missing.' }
+          if ($optionsCpp -notmatch 'Start with Windows \(minimized to tray\)') { throw 'Options UI label missing.' }
+          if ($optionsCpp -notmatch 'setSonoBusWindowsStartupEnabled') { throw 'Options UI handler missing.' }
+          if ($window -match 'Start with Windows \(minimized to tray\)') { throw 'Duplicate host popup startup item still present.' }
+
+      - name: Configure CMake
+        shell: pwsh
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+
+      - name: Build SonoBus standalone
+        shell: pwsh
+        run: cmake --build build --config Release --target SonoBus_Standalone --parallel 2
+
+      - name: Commit corrected UI
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- Source/OptionsView.h Source/OptionsView.cpp Source/SonoStandaloneFilterWindow.h README.md FORK_CHANGES.md
+          git diff --cached --check
+          git commit -m "Move Windows autostart toggle into Options panel"
+          git push origin HEAD:main
