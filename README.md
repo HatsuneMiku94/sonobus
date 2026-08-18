@@ -1,4 +1,4 @@
-# SonoBus — Windows Comfort Fork
+# SonoBus — Windows Little Features Fork
 
 > **Unofficial community fork of [SonoBus](https://github.com/sonosaurus/sonobus)** with a small set of Windows quality-of-life additions.
 >
